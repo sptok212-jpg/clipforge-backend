@@ -25,6 +25,11 @@ def _base_ydl_opts() -> dict:
     opts = {
         "quiet": True,
         "no_warnings": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android"],
+            }
+        },
     }
     cookies_file = _write_cookies_file()
     if cookies_file:
@@ -41,7 +46,7 @@ def download_video(youtube_url: str) -> str:
 
     ydl_opts = {
         **_base_ydl_opts(),
-        "format": "best/bestvideo+bestaudio",
+        "format": "best[ext=mp4]/best",
         "outtmpl": output_path,
         "merge_output_format": "mp4",
     }
