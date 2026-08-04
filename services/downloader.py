@@ -23,7 +23,7 @@ def _base_ydl_opts() -> dict:
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web", "ios"],
+                "player_client": ["ios"],
             }
         },
     }
@@ -39,7 +39,7 @@ def download_video(youtube_url: str) -> str:
 
     ydl_opts = {
         **_base_ydl_opts(),
-        "format": "bv*+ba/b",
+        "format": "best",
         "outtmpl": output_path,
         "merge_output_format": "mp4",
     }
