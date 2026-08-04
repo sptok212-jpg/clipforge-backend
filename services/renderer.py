@@ -7,13 +7,7 @@ TMP_DIR = "/tmp/clipforge"
 
 
 def _build_caption_filter(caption_text: str, video_w: int, video_h: int) -> str:
-    """
-    Builds an ffmpeg drawtext filter to burn in a simple caption bar
-    near the bottom of the vertical video.
-    """
-    # Wrap text so it doesn't overflow the frame width
     wrapped = textwrap.fill(caption_text, width=28)
-    # Escape characters ffmpeg's drawtext is picky about
     escaped = (
         wrapped.replace("\\", "\\\\")
         .replace(":", "\\:")
@@ -25,11 +19,11 @@ def _build_caption_filter(caption_text: str, video_w: int, video_h: int) -> str:
     box_y = int(video_h * 0.72)
 
     return (
-    f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-    f"text='{escaped}':fontcolor=white:fontsize={font_size}:"
-    f"box=1:boxcolor=black@0.55:boxborderw=14:"
-    f"x=(w-text_w)/2:y={box_y}:line_spacing=8"
-)
+        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+        f"text='{escaped}':fontcolor=white:fontsize={font_size}:"
+        f"box=1:boxcolor=black@0.55:boxborderw=14:"
+        f"x=(w-text_w)/2:y={box_y}:line_spacing=8"
+    )
 
 
 def render_clip(
@@ -38,18 +32,12 @@ def render_clip(
     end: float,
     caption_text: str,
 ) -> str:
-    """
-    Cuts a segment from the source video, crops/pads it to a 9:16
-    vertical frame (1080x1920), burns in the caption text, and
-    returns the path to the rendered clip.
-    """
     duration = max(1.0, end - start)
     output_path = os.path.join(TMP_DIR, f"{uuid.uuid4()}.mp4")
 
     target_w, target_h = 1080, 1920
     caption_filter = _build_caption_filter(caption_text, target_w, target_h)
 
-    # Scale to fill 9:16, center-crop the overflow, then burn caption
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
         f"crop={target_w}:{target_h},"
@@ -69,24 +57,19 @@ def render_clip(
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-if result.returncode != 0:
-    print(f"FFMPEG FULL STDERR:\n{result.stderr}")  # full log goes to Railway logs
-    # Try to surface the actual error line instead of the encoder banner
-    error_lines = [
-        line for line in result.stderr.splitlines()
-        if "error" in line.lower() or "invalid" in line.lower() or "failed" in line.lower()
-    ]
-    summary = "\n".join(error_lines[-5:]) if error_lines else result.stderr[-500:]
-    raise RuntimeError(f"ffmpeg render failed: {summary}")
+    if result.returncode != 0:
+        print(f"FFMPEG FULL STDERR:\n{result.stderr}")
+        error_lines = [
+            line for line in result.stderr.splitlines()
+            if "error" in line.lower() or "invalid" in line.lower() or "failed" in line.lower()
+        ]
+        summary = "\n".join(error_lines[-5:]) if error_lines else result.stderr[-500:]
+        raise RuntimeError(f"ffmpeg render failed: {summary}")
 
     return output_path
 
 
 def upload_clip_to_storage(supabase_client, local_path: str, storage_path: str) -> str:
-    """
-    Uploads a rendered clip to Supabase Storage (bucket 'clips') and
-    returns its public URL.
-    """
     with open(local_path, "rb") as f:
         supabase_client.storage.from_("clips").upload(
             storage_path,
