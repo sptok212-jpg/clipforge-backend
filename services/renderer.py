@@ -30,26 +30,25 @@ def render_clip(source_video_path: str, start: float, end: float, caption_text: 
     os.makedirs(TMP_DIR, exist_ok=True)
     duration = max(1.0, end - start)
     output_path = os.path.join(TMP_DIR, f"{uuid.uuid4()}.mp4")
-    target_w, target_h = 1080, 1920
+    
+    # TURUNKAN RESOLUSI KE 720x1280 agar tidak OOM di Railway
+    target_w, target_h = 720, 1280
     caption_filter = _build_caption_filter(caption_text, target_w, target_h)
     
+    # Gunakan fast_bilinear untuk scaling agar hemat RAM
     vf = (
-        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase:flags=fast_bilinear,"
         f"crop={target_w}:{target_h},"
         f"{caption_filter}"
     )
     
-    # PERBAIKAN OOM (Out of Memory):
-    # 1. -preset ultrafast (paling hemat RAM)
-    # 2. -threads 1 (tidak multi-threading, jadi RAM tidak kebablasan)
-    # 3. -tune zerolatency (mengurangi penggunaan buffer memori)
     cmd = [
         "ffmpeg", "-y",
         "-i", source_video_path,
         "-ss", str(start),
         "-t", str(duration),
         "-vf", vf,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", # CRF 28 = lebih kecil file size & RAM
         "-tune", "zerolatency",
         "-pix_fmt", "yuv420p",
         "-r", "30",
