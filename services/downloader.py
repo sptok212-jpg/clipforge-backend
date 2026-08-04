@@ -35,7 +35,8 @@ def _opts_for_client(client: str) -> dict:
 def _extract_info_with_fallback(youtube_url: str) -> dict:
     """
     Tries each YouTube player client in turn until one returns
-    actual downloadable formats.
+    actual downloadable formats. Used for metadata-only lookups
+    (get_video_info) where there's no download-time mismatch risk.
     """
     last_error = None
     for client in CLIENTS_TO_TRY:
@@ -54,44 +55,38 @@ def _extract_info_with_fallback(youtube_url: str) -> dict:
     raise RuntimeError("No client returned usable formats for this video.")
 
 
-def _pick_best_format_id(formats: list[dict]) -> str:
-    combined = [f for f in formats if f.get("vcodec") != "none" and f.get("acodec") != "none"]
-    if combined:
-        combined.sort(key=lambda f: f.get("height") or 0, reverse=True)
-        return combined[0]["format_id"]
-
-    video_only = [f for f in formats if f.get("vcodec") != "none"]
-    if video_only:
-        video_only.sort(key=lambda f: f.get("height") or 0, reverse=True)
-        return video_only[0]["format_id"]
-
-    raise RuntimeError("No downloadable formats found for this video.")
-
-
 def download_video(youtube_url: str) -> str:
+    """
+    Downloads the video in a single extract+download pass per client,
+    using a flexible format selector so yt-dlp validates format
+    availability at download time instead of relying on a format_id
+    pinned from a separate, earlier extraction (which can go stale).
+    """
     job_id = str(uuid.uuid4())
     output_path = os.path.join(TMP_DIR, f"{job_id}.mp4")
 
-    info = _extract_info_with_fallback(youtube_url)
-    client_used = info["_client_used"]
-    format_id = _pick_best_format_id(info["formats"])
+    last_error = None
+    for client in CLIENTS_TO_TRY:
+        ydl_opts = {
+            **_opts_for_client(client),
+            "format": "bv*+ba/b/best",
+            "outtmpl": output_path,
+            "merge_output_format": "mp4",
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+        except Exception as e:
+            last_error = e
+            continue  # try the next client
 
-    ydl_opts = {
-        **_opts_for_client(client_used),
-        "format": format_id,
-        "outtmpl": output_path,
-        "merge_output_format": "mp4",
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([youtube_url])
-
-    if not os.path.exists(output_path):
+        if os.path.exists(output_path):
+            return output_path
         for f in os.listdir(TMP_DIR):
             if f.startswith(job_id):
                 return os.path.join(TMP_DIR, f)
-        raise FileNotFoundError("Download failed: no output file found")
 
-    return output_path
+    raise RuntimeError(f"Download gagal di semua client. Error terakhir: {last_error}")
 
 
 def get_video_info(youtube_url: str) -> dict:
