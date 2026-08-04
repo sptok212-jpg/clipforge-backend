@@ -1,6 +1,6 @@
 import os
 import shutil
-from fastapi import FastAPI, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import JobRequest, JobResponse
@@ -38,8 +38,8 @@ def create_job(req: JobRequest, background_tasks: BackgroundTasks):
 async def upload_video(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    project_id: str = "",
-    user_id: str = "",
+    project_id: str = Form(""),
+    user_id: str = Form(""),
 ):
     """Upload video file dan trigger processing"""
     try:
