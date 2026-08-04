@@ -46,7 +46,7 @@ def download_video(youtube_url: str) -> str:
 
     ydl_opts = {
         **_base_ydl_opts(),
-        "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+        "format": "best[height<=1080]/best",
         "outtmpl": output_path,
         "merge_output_format": "mp4",
     }
