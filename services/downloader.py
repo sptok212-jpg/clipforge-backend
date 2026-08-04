@@ -9,10 +9,6 @@ COOKIES_PATH = "/tmp/clipforge/cookies.txt"
 
 
 def _write_cookies_file() -> str | None:
-    """
-    Writes the YOUTUBE_COOKIES env var (Netscape cookies.txt format)
-    to a temp file for yt-dlp to use, if it's set.
-    """
     cookies_content = os.environ.get("YOUTUBE_COOKIES")
     if not cookies_content:
         return None
@@ -27,7 +23,7 @@ def _base_ydl_opts() -> dict:
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],
+                "player_client": ["android", "web", "ios"],
             }
         },
     }
@@ -38,15 +34,12 @@ def _base_ydl_opts() -> dict:
 
 
 def download_video(youtube_url: str) -> str:
-    """
-    Downloads a YouTube video and returns the local file path.
-    """
     job_id = str(uuid.uuid4())
     output_path = os.path.join(TMP_DIR, f"{job_id}.mp4")
 
     ydl_opts = {
         **_base_ydl_opts(),
-        "format": "best[ext=mp4]/best",
+        "format": "bv*+ba/b",
         "outtmpl": output_path,
         "merge_output_format": "mp4",
     }
@@ -64,9 +57,6 @@ def download_video(youtube_url: str) -> str:
 
 
 def get_video_info(youtube_url: str) -> dict:
-    """
-    Fetches metadata (title, duration, thumbnail) without downloading.
-    """
     ydl_opts = {
         **_base_ydl_opts(),
         "skip_download": True,
