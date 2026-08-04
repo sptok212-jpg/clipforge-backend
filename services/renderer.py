@@ -39,22 +39,23 @@ def render_clip(source_video_path: str, start: float, end: float, caption_text: 
         f"{caption_filter}"
     )
     
-    # Perbaikan:
-    # 1. -map dihapus agar ffmpeg tidak salah ambil stream thumbnail/gambar diam.
-    # 2. -r 30 ditambahkan agar frame rate konsisten 30fps.
-    # 3. -shortest untuk memastikan durasi pas.
+    # PERBAIKAN OOM (Out of Memory):
+    # 1. -preset ultrafast (paling hemat RAM)
+    # 2. -threads 1 (tidak multi-threading, jadi RAM tidak kebablasan)
+    # 3. -tune zerolatency (mengurangi penggunaan buffer memori)
     cmd = [
         "ffmpeg", "-y",
         "-i", source_video_path,
         "-ss", str(start),
         "-t", str(duration),
         "-vf", vf,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-tune", "zerolatency",
         "-pix_fmt", "yuv420p",
         "-r", "30",
+        "-threads", "1",
         "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
         "-movflags", "+faststart",
-        "-shortest",
         output_path,
     ]
     
@@ -64,11 +65,9 @@ def render_clip(source_video_path: str, start: float, end: float, caption_text: 
         tail = "\n".join(result.stderr.strip().splitlines()[-15:])
         raise RuntimeError(f"ffmpeg render failed (exit {result.returncode}):\n{tail}")
         
-    # Validasi output: pastikan file ada dan ukurannya masuk akal (bukan file kosong/rusak)
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 10_000:
         size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-        raise RuntimeError(f"Output render tidak valid (size={size} bytes). "
-                           f"Kemungkinan seek di luar data video.")
+        raise RuntimeError(f"Output render tidak valid (size={size} bytes).")
     return output_path
 
 
