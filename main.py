@@ -35,7 +35,12 @@ def create_job(req: JobRequest, background_tasks: BackgroundTasks):
 
 
 @app.post("/upload")
-async def upload_video(file: UploadFile = File(...), project_id: str = "", user_id: str = ""):
+async def upload_video(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    project_id: str = "",
+    user_id: str = "",
+):
     """Upload video file dan trigger processing"""
     try:
         # Simpan file
@@ -46,9 +51,8 @@ async def upload_video(file: UploadFile = File(...), project_id: str = "", user_
 
         # Trigger background processing
         req = JobRequest(youtube_url=None, project_id=project_id, user_id=user_id)
-        # Cukup panggil langsung, tidak perlu background task di sini
-        # (bisa di-add nanti kalau perlu)
-        
+        background_tasks.add_task(process_job, req)
+
         return {"status": "uploaded", "file_path": file_path}
     except Exception as e:
         return {"status": "error", "message": str(e)}
