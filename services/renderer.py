@@ -24,46 +24,52 @@ def _build_caption_filter(caption_text: str, video_w: int, video_h: int) -> str:
         f"box=1:boxcolor=black@0.55:boxborderw=14:"
         f"x=(w-text_w)/2:y={box_y}:line_spacing=8"
     )
+
+
 def render_clip(source_video_path: str, start: float, end: float, caption_text: str) -> str:
     os.makedirs(TMP_DIR, exist_ok=True)
     duration = max(1.0, end - start)
     output_path = os.path.join(TMP_DIR, f"{uuid.uuid4()}.mp4")
     target_w, target_h = 1080, 1920
     caption_filter = _build_caption_filter(caption_text, target_w, target_h)
+    
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
         f"crop={target_w}:{target_h},"
         f"{caption_filter}"
     )
-    # -ss DIPINDAH setelah -i (output seeking) => audio akurat & utuh.
-    # -map 0:a? => tidak error walau source tanpa audio.
-    # -pix_fmt yuv420p => kompatibilitas pemutar.
+    
+    # Perbaikan:
+    # 1. -map dihapus agar ffmpeg tidak salah ambil stream thumbnail/gambar diam.
+    # 2. -r 30 ditambahkan agar frame rate konsisten 30fps.
+    # 3. -shortest untuk memastikan durasi pas.
     cmd = [
         "ffmpeg", "-y",
         "-i", source_video_path,
         "-ss", str(start),
         "-t", str(duration),
-        "-map", "0:v:0", "-map", "0:a?",
         "-vf", vf,
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-pix_fmt", "yuv420p",
-        "-threads", "2",
-        "-c:a", "aac", "-b:a", "128k",
+        "-r", "30",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
         "-movflags", "+faststart",
+        "-shortest",
         output_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)  # 15 menit max
+    
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    
     if result.returncode != 0:
         tail = "\n".join(result.stderr.strip().splitlines()[-15:])
         raise RuntimeError(f"ffmpeg render failed (exit {result.returncode}):\n{tail}")
-    # validasi output: file ada & ukuran masuk akal
+        
+    # Validasi output: pastikan file ada dan ukurannya masuk akal (bukan file kosong/rusak)
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 10_000:
         size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
         raise RuntimeError(f"Output render tidak valid (size={size} bytes). "
                            f"Kemungkinan seek di luar data video.")
     return output_path
-
-
 
 
 def upload_clip_to_storage(supabase_client, local_path: str, storage_path: str) -> str:
