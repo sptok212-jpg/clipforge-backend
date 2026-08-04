@@ -1,6 +1,5 @@
 import os
-import shutil
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import JobRequest, JobResponse
@@ -12,7 +11,6 @@ from supabase_client import supabase
 
 app = FastAPI(title="ClipForge Backend")
 
-# Allow requests from your Vercel frontend (and localhost for testing)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -44,18 +42,14 @@ def process_job(req: JobRequest):
             "id", req.project_id
         ).execute()
 
-        # 1. Download video
         video_path = download_video(req.youtube_url)
         info = get_video_info(req.youtube_url)
 
-        # 2. Extract audio + transcribe (preserves original language)
         audio_path = extract_audio(video_path)
         transcript = transcribe_audio(audio_path)
 
-        # 3. Analyze transcript -> get clip segments
         clip_segments = analyze_transcript(transcript["segments"])
 
-        # 4. Render + upload each clip
         for seg in clip_segments:
             local_clip_path = render_clip(
                 video_path,
@@ -72,10 +66,11 @@ def process_job(req: JobRequest):
                 "title": seg["title"],
                 "topic": seg["topic"],
                 "viral_score": seg["viral_score"],
-                "caption_text": seg["caption_text"],
+                "transcript": seg["caption_text"],
                 "start_time": seg["start"],
                 "end_time": seg["end"],
                 "video_url": public_url,
+                "status": "completed",
             }).execute()
 
             os.remove(local_clip_path)
@@ -84,6 +79,7 @@ def process_job(req: JobRequest):
             "status": "completed",
             "title": info.get("title"),
             "thumbnail_url": info.get("thumbnail"),
+            "source_duration": info.get("duration"),
         }).eq("id", req.project_id).execute()
 
     except Exception as e:
