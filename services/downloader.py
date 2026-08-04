@@ -5,6 +5,12 @@ import yt_dlp
 TMP_DIR = "/tmp/clipforge"
 os.makedirs(TMP_DIR, exist_ok=True)
 
+EXTRACTOR_ARGS = {
+    "youtube": {
+        "player_client": ["android", "web"],
+    }
+}
+
 
 def download_video(youtube_url: str) -> str:
     """
@@ -19,6 +25,7 @@ def download_video(youtube_url: str) -> str:
         "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": True,
+        "extractor_args": EXTRACTOR_ARGS,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -38,7 +45,12 @@ def get_video_info(youtube_url: str) -> dict:
     """
     Fetches metadata (title, duration, thumbnail) without downloading.
     """
-    ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extractor_args": EXTRACTOR_ARGS,
+    }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(youtube_url, download=False)
     return {
