@@ -43,16 +43,15 @@ async def upload_video(
 ):
     """Upload video file dan trigger processing"""
     try:
-        # Simpan file
         file_path = os.path.join(UPLOAD_DIR, f"{project_id}.mp4")
+        
+        # STREAM ke disk, JANGAN muat seluruh file ke RAM (mencegah error di Railway)
         with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-
-        # Trigger background processing
+            while chunk := await file.read(1024 * 1024):  # Baca 1 MB per chunk
+                f.write(chunk)
+                
         req = JobRequest(youtube_url=None, project_id=project_id, user_id=user_id)
         background_tasks.add_task(process_job, req)
-
         return {"status": "uploaded", "file_path": file_path}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -82,14 +81,33 @@ def process_job(req: JobRequest):
         print(f"DEBUG: Total segments from AI: {len(clip_segments)}")
 
         rendered_count = 0
+        MIN_CLIP_DURATION = 20.0  # Minimal durasi 20 detik sesuai prompt AI
+        
         for idx, seg in enumerate(clip_segments):
-            seg_start = max(0, min(seg["start"], video_duration - 1))
-            seg_end = max(seg_start + 5, min(seg["end"], video_duration))
+            raw_start = float(seg.get("start", 0))
+            raw_end = float(seg.get("end", 0))
+            
+            # Skip jika segment tidak valid
+            if raw_end <= raw_start:
+                print(f"DEBUG: SKIPPED seg {idx+1} end<=start")
+                continue
 
-            print(f"DEBUG: Segment {idx+1} '{seg['title']}' - {seg_start:.1f}-{seg_end:.1f}s")
+            seg_start = max(0.0, min(raw_start, video_duration - 1))
+            seg_end = min(raw_end, video_duration)
+            
+            # PAKSA minimal durasi 20 detik (sebelumnya hanya 5 detik)
+            seg_end = max(seg_end, seg_start + MIN_CLIP_DURATION)
+            seg_end = min(seg_end, video_duration) # Pastikan tidak melebihi durasi video
+            
+            # Skip jika setelah dipaksa 20 detik, durasinya terlalu mepet
+            if seg_end - seg_start < 15:
+                print(f"DEBUG: SKIPPED seg {idx+1} too short after clamp ({seg_start:.1f}-{seg_end:.1f}s)")
+                continue
+
+            print(f"DEBUG: Segment {idx+1} '{seg['title']}' - {seg_start:.1f}-{seg_end:.1f}s (dur={seg_end-seg_start:.1f}s)")
 
             if seg_start >= video_duration - 2:
-                print(f"DEBUG: SKIPPED segment {idx+1}")
+                print(f"DEBUG: SKIPPED segment {idx+1} (start too close to end)")
                 continue
 
             try:
