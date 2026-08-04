@@ -13,11 +13,7 @@ app = FastAPI(title="ClipForge Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://clipper-ai-lake.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
+    allow_origin_regex=r"https://clipper.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
