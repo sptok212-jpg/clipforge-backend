@@ -76,8 +76,17 @@ def get_video_info(youtube_url: str) -> dict:
 
 def get_local_duration(video_path: str) -> float:
     result = subprocess.run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", video_path],
+        ["ffprobe", "-v", "error", "-print_format", "json",
+         "-show_format", "-show_streams", video_path],
         capture_output=True, text=True,
     )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError(f"ffprobe gagal membaca video: {result.stderr[:300]}")
     data = json.loads(result.stdout)
-    return float(data["format"]["duration"])
+    v_streams = [s for s in data.get("streams", []) if s.get("codec_type") == "video"]
+    if not v_streams:
+        raise RuntimeError("File tidak punya stream video (mungkin corrupt/bukan video)")
+    dur_str = data.get("format", {}).get("duration") or v_streams[0].get("duration")
+    if not dur_str:
+        raise RuntimeError("Durasi tidak terbaca dari metadata")
+    return float(dur_str)
