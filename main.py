@@ -40,6 +40,7 @@ def process_job(req: JobRequest):
 
         video_path = download_video(req.youtube_url)
         info = get_video_info(req.youtube_url)
+        video_duration = info.get("duration") or 0
 
         audio_path = extract_audio(video_path)
         transcript = transcribe_audio(audio_path)
@@ -47,10 +48,17 @@ def process_job(req: JobRequest):
         clip_segments = analyze_transcript(transcript["segments"])
 
         for seg in clip_segments:
+            seg_start = max(0, min(seg["start"], video_duration - 1)) if video_duration else seg["start"]
+            seg_end = max(seg_start + 5, min(seg["end"], video_duration)) if video_duration else seg["end"]
+
+            if video_duration and seg_start >= video_duration - 2:
+                # This segment is essentially out of range, skip it
+                continue
+
             local_clip_path = render_clip(
                 video_path,
-                seg["start"],
-                seg["end"],
+                seg_start,
+                seg_end,
                 seg["caption_text"],
             )
             storage_path = f"{req.user_id}/{req.project_id}/{seg['title'][:30]}.mp4"
@@ -63,8 +71,8 @@ def process_job(req: JobRequest):
                 "topic": seg["topic"],
                 "viral_score": seg["viral_score"],
                 "transcript": seg["caption_text"],
-                "start_time": seg["start"],
-                "end_time": seg["end"],
+                "start_time": seg_start,
+                "end_time": seg_end,
                 "video_url": public_url,
                 "status": "completed",
             }).execute()
@@ -75,7 +83,7 @@ def process_job(req: JobRequest):
             "status": "completed",
             "title": info.get("title"),
             "thumbnail_url": info.get("thumbnail"),
-            "source_duration": info.get("duration"),
+            "source_duration": video_duration,
         }).eq("id", req.project_id).execute()
 
     except Exception as e:
