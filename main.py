@@ -127,7 +127,7 @@ def process_job(req: JobRequest):
         supabase.table("projects").update({
             "status": "completed",
             "title": "Uploaded Video",
-            "source_duration": video_duration,
+            "source_duration": int(video_duration),
         }).eq("id", req.project_id).execute()
 
     except Exception as e:
