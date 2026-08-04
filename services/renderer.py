@@ -69,8 +69,15 @@ def render_clip(
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg render failed: {result.stderr[-2000:]}")
+if result.returncode != 0:
+    print(f"FFMPEG FULL STDERR:\n{result.stderr}")  # full log goes to Railway logs
+    # Try to surface the actual error line instead of the encoder banner
+    error_lines = [
+        line for line in result.stderr.splitlines()
+        if "error" in line.lower() or "invalid" in line.lower() or "failed" in line.lower()
+    ]
+    summary = "\n".join(error_lines[-5:]) if error_lines else result.stderr[-500:]
+    raise RuntimeError(f"ffmpeg render failed: {summary}")
 
     return output_path
 
