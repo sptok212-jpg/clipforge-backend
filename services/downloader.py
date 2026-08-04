@@ -8,6 +8,7 @@ TMP_DIR = "/tmp/clipforge"
 os.makedirs(TMP_DIR, exist_ok=True)
 
 COOKIES_PATH = "/tmp/clipforge/cookies.txt"
+CLIENTS_TO_TRY = ["ios", "android", "web"]
 
 
 def _write_cookies_file() -> str | None:
@@ -19,15 +20,11 @@ def _write_cookies_file() -> str | None:
     return COOKIES_PATH
 
 
-def _base_ydl_opts() -> dict:
+def _opts_for_client(client: str) -> dict:
     opts = {
         "quiet": True,
         "no_warnings": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["ios"],
-            }
-        },
+        "extractor_args": {"youtube": {"player_client": [client]}},
     }
     cookies_file = _write_cookies_file()
     if cookies_file:
@@ -35,17 +32,56 @@ def _base_ydl_opts() -> dict:
     return opts
 
 
+def _extract_info_with_fallback(youtube_url: str) -> dict:
+    """
+    Tries each YouTube player client in turn until one returns
+    actual downloadable formats.
+    """
+    last_error = None
+    for client in CLIENTS_TO_TRY:
+        try:
+            opts = {**_opts_for_client(client), "skip_download": True}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(youtube_url, download=False)
+            if info.get("formats"):
+                info["_client_used"] = client
+                return info
+        except Exception as e:
+            last_error = e
+            continue
+    if last_error:
+        raise last_error
+    raise RuntimeError("No client returned usable formats for this video.")
+
+
+def _pick_best_format_id(formats: list[dict]) -> str:
+    combined = [f for f in formats if f.get("vcodec") != "none" and f.get("acodec") != "none"]
+    if combined:
+        combined.sort(key=lambda f: f.get("height") or 0, reverse=True)
+        return combined[0]["format_id"]
+
+    video_only = [f for f in formats if f.get("vcodec") != "none"]
+    if video_only:
+        video_only.sort(key=lambda f: f.get("height") or 0, reverse=True)
+        return video_only[0]["format_id"]
+
+    raise RuntimeError("No downloadable formats found for this video.")
+
+
 def download_video(youtube_url: str) -> str:
     job_id = str(uuid.uuid4())
     output_path = os.path.join(TMP_DIR, f"{job_id}.mp4")
 
+    info = _extract_info_with_fallback(youtube_url)
+    client_used = info["_client_used"]
+    format_id = _pick_best_format_id(info["formats"])
+
     ydl_opts = {
-        **_base_ydl_opts(),
-        "format": "best",
+        **_opts_for_client(client_used),
+        "format": format_id,
         "outtmpl": output_path,
         "merge_output_format": "mp4",
     }
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([youtube_url])
 
@@ -59,12 +95,7 @@ def download_video(youtube_url: str) -> str:
 
 
 def get_video_info(youtube_url: str) -> dict:
-    ydl_opts = {
-        **_base_ydl_opts(),
-        "skip_download": True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(youtube_url, download=False)
+    info = _extract_info_with_fallback(youtube_url)
     return {
         "title": info.get("title"),
         "duration": info.get("duration"),
@@ -73,15 +104,8 @@ def get_video_info(youtube_url: str) -> dict:
 
 
 def get_local_duration(video_path: str) -> float:
-    """
-    Reads the actual duration of a downloaded video file using ffprobe.
-    More reliable than YouTube's reported duration.
-    """
     result = subprocess.run(
-        [
-            "ffprobe", "-v", "quiet", "-print_format", "json",
-            "-show_format", video_path,
-        ],
+        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", video_path],
         capture_output=True, text=True,
     )
     data = json.loads(result.stdout)
