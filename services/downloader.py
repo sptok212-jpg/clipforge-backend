@@ -1,5 +1,7 @@
 import os
 import uuid
+import json
+import subprocess
 import yt_dlp
 
 TMP_DIR = "/tmp/clipforge"
@@ -23,7 +25,7 @@ def _base_ydl_opts() -> dict:
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],
+                "player_client": ["ios"],
             }
         },
     }
@@ -33,55 +35,17 @@ def _base_ydl_opts() -> dict:
     return opts
 
 
-def _pick_best_format_id(formats: list[dict]) -> str:
-    """
-    Inspects the actual formats YouTube returned for this video and
-    picks the best usable one ourselves, instead of guessing a format
-    selector string that may not match what's actually available.
-    """
-    # Prefer a combined (video+audio) mp4 format, highest resolution first
-    combined = [
-        f for f in formats
-        if f.get("vcodec") != "none" and f.get("acodec") != "none"
-    ]
-    if combined:
-        combined.sort(key=lambda f: f.get("height") or 0, reverse=True)
-        return combined[0]["format_id"]
-
-    # Fall back to the highest-resolution video-only format
-    video_only = [f for f in formats if f.get("vcodec") != "none"]
-    if video_only:
-        video_only.sort(key=lambda f: f.get("height") or 0, reverse=True)
-        return video_only[0]["format_id"]
-
-    raise RuntimeError("No downloadable formats found for this video.")
-
-
 def download_video(youtube_url: str) -> str:
     job_id = str(uuid.uuid4())
     output_path = os.path.join(TMP_DIR, f"{job_id}.mp4")
 
-    # Step 1: extract info (no download) to see what formats truly exist
-    info_opts = {**_base_ydl_opts(), "skip_download": True}
-    with yt_dlp.YoutubeDL(info_opts) as ydl:
-        info = ydl.extract_info(youtube_url, download=False)
-
-    formats = info.get("formats") or []
-    if not formats:
-        raise RuntimeError(
-            "YouTube returned no available formats for this video "
-            "(it may be blocked, private, or region-restricted)."
-        )
-
-    format_id = _pick_best_format_id(formats)
-
-    # Step 2: download using the exact format_id we confirmed exists
     ydl_opts = {
         **_base_ydl_opts(),
-        "format": format_id,
+        "format": "best",
         "outtmpl": output_path,
         "merge_output_format": "mp4",
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([youtube_url])
 
@@ -106,3 +70,19 @@ def get_video_info(youtube_url: str) -> dict:
         "duration": info.get("duration"),
         "thumbnail": info.get("thumbnail"),
     }
+
+
+def get_local_duration(video_path: str) -> float:
+    """
+    Reads the actual duration of a downloaded video file using ffprobe.
+    More reliable than YouTube's reported duration.
+    """
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_format", video_path,
+        ],
+        capture_output=True, text=True,
+    )
+    data = json.loads(result.stdout)
+    return float(data["format"]["duration"])
