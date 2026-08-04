@@ -25,10 +25,11 @@ def _build_caption_filter(caption_text: str, video_w: int, video_h: int) -> str:
     box_y = int(video_h * 0.72)
 
     return (
-        f"drawtext=text='{escaped}':fontcolor=white:fontsize={font_size}:"
-        f"box=1:boxcolor=black@0.55:boxborderw=14:"
-        f"x=(w-text_w)/2:y={box_y}:line_spacing=8"
-    )
+    f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+    f"text='{escaped}':fontcolor=white:fontsize={font_size}:"
+    f"box=1:boxcolor=black@0.55:boxborderw=14:"
+    f"x=(w-text_w)/2:y={box_y}:line_spacing=8"
+)
 
 
 def render_clip(
