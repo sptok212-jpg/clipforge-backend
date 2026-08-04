@@ -24,26 +24,22 @@ def _build_caption_filter(caption_text: str, video_w: int, video_h: int) -> str:
         f"box=1:boxcolor=black@0.55:boxborderw=14:"
         f"x=(w-text_w)/2:y={box_y}:line_spacing=8"
     )
-
-
 def render_clip(
     source_video_path: str,
     start: float,
     end: float,
     caption_text: str,
 ) -> str:
+    os.makedirs(TMP_DIR, exist_ok=True)  # jaga-jaga folder belum ada
     duration = max(1.0, end - start)
     output_path = os.path.join(TMP_DIR, f"{uuid.uuid4()}.mp4")
-
     target_w, target_h = 1080, 1920
     caption_filter = _build_caption_filter(caption_text, target_w, target_h)
-
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
         f"crop={target_w}:{target_h},"
         f"{caption_filter}"
     )
-
     cmd = [
         "ffmpeg", "-y",
         "-ss", str(start),
@@ -51,22 +47,23 @@ def render_clip(
         "-t", str(duration),
         "-vf", vf,
         "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-threads", "2",              # <-- batasi thread per proses, jangan auto
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
         output_path,
     ]
-
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"FFMPEG FULL STDERR:\n{result.stderr}")
-        error_lines = [
-            line for line in result.stderr.splitlines()
-            if "error" in line.lower() or "invalid" in line.lower() or "failed" in line.lower()
-        ]
-        summary = "\n".join(error_lines[-5:]) if error_lines else result.stderr[-500:]
-        raise RuntimeError(f"ffmpeg render failed: {summary}")
-
+        full_stderr = result.stderr.strip()
+        print(f"FFMPEG FULL STDERR (exit code {result.returncode}):\n{full_stderr}")
+        lines = [l for l in full_stderr.splitlines() if l.strip()]
+        tail = "\n".join(lines[-15:]) if lines else "(stderr kosong — kemungkinan proses dibunuh sinyal)"
+        raise RuntimeError(
+            f"ffmpeg render failed (exit code {result.returncode}):\n{tail}"
+        )
     return output_path
+
+
 
 
 def upload_clip_to_storage(supabase_client, local_path: str, storage_path: str) -> str:
