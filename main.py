@@ -73,17 +73,17 @@ def process_job(req: JobRequest):
                 public_url = upload_clip_to_storage(supabase, local_clip_path, storage_path)
 
                 supabase.table("clips").insert({
-                    "project_id": req.project_id,
-                    "user_id": req.user_id,
-                    "title": seg["title"],
-                    "topic": seg["topic"],
-                    "viral_score": seg["viral_score"],
-                    "transcript": seg["caption_text"],
-                    "start_time": seg_start,
-                    "end_time": seg_end,
-                    "video_url": public_url,
-                    "status": "completed",
-                }).execute()
+    "project_id": req.project_id,
+    "user_id": req.user_id,
+    "title": seg["title"],
+    "topic": seg["topic"],
+    "viral_score": seg["viral_score"],
+    "transcript": seg["caption_text"],
+    "start_time": int(seg_start),
+    "end_time": int(seg_end),
+    "video_url": public_url,
+    "status": "completed",
+}).execute()
 
                 os.remove(local_clip_path)
                 rendered_count += 1
